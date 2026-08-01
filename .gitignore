@@ -4,3 +4,5 @@
 build/**
 
 images/*.img
+
+.vscode/**

@@ -1,5 +1,5 @@
 
-//#define __USE_UNIX98
+#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -10,35 +10,49 @@
 
 #include "../include/disk.h"
 
-
+// disk_create
 // disk_open
 // disk_close
 // disk_read
 // disk_write
 
+int disk_create(const char* path, off_t size) {
+    
+    int fd = open(path, O_CREAT | O_EXCL | O_RDWR, 0644);
+
+    if (fd == -1) {
+        return -1;
+    }
+    if (ftruncate(fd, size) == -1) {
+        close(fd);
+        return -1;
+    }
+
+    if (close(fd) == -1) {
+        return -1;
+    }
+
+
+    
+
+    return 0;
+}
 
 struct disk* disk_open(const char* path) {
     int fd = open(path, O_RDWR);
     if (fd == -1) {
-        perror("open");
         return NULL;
     }
 
     struct stat diskstat;
     if (fstat(fd, &diskstat) ==-1) {
-        perror("fstat");
-        if (close(fd) == -1) {
-            perror("close");
-        }
+        close(fd);
         return NULL;
     }
 
     struct disk* disk = malloc(sizeof(*disk));
     if (disk == NULL) {
-        perror("malloc");
-        if (close(fd) == -1) {
-            perror("close");
-        }
+        close(fd);
         return NULL;
     }
 
@@ -49,12 +63,12 @@ struct disk* disk_open(const char* path) {
     return disk;
 }
 
-void disk_close(struct disk* disk) {
+int disk_close(struct disk* disk) {
     if (close(disk->fd) == -1) {
-        perror("close");
+        return -1;
     }
     free(disk);
-    return;
+    return 0;
 }
 
 ssize_t disk_read(struct disk* disk, void* buffer, off_t offset, size_t count) {

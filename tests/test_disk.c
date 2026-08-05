@@ -1,11 +1,20 @@
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include "../include/disk.h"
 
+#define TEST_PATH "./images/test.img"
+#define TEST_DISK_SIZE
 
 int main(void) {
-    
-    struct disk * disk = disk_open("./images/disk.img");
+    unlink(TEST_PATH);
+
+    off_t size = 1024 * 1024 * 1;
+
+    int created = disk_create(TEST_PATH, size);
+
+    assert(!created);
+    struct disk * disk = disk_open(TEST_PATH);
 
     char buff[] = "test\n";
 
@@ -23,7 +32,9 @@ int main(void) {
     disk_write(disk, erase, 0, sizeof(erase));
 
 
-    disk_close(disk);
+    assert(!disk_close(disk));
+
+    assert(!unlink(TEST_PATH));
     
     return 0;
 }

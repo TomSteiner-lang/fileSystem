@@ -4,12 +4,12 @@
 #include "../include/disk.h"
 
 #define TEST_PATH "./images/test.img"
-#define TEST_DISK_SIZE
+#define TEST_DISK_SIZE 1024 * 1024 * 1
 
 int main(void) {
     unlink(TEST_PATH);
 
-    off_t size = 1024 * 1024 * 1;
+    off_t size = TEST_DISK_SIZE;
 
     int created = disk_create(TEST_PATH, size);
 

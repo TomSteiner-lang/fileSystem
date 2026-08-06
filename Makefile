@@ -1,36 +1,40 @@
-CC = gcc
+CC := gcc
 
-CFLAGS = -Wall -Wextra -Werror -g -Iinclude
+CFLAGS := -Wall -Wextra -Werror -g -Iinclude
 
-SRC = $(wildcard src/*.c)
+# Source files
+SRC := $(wildcard src/*.c)
+OBJ := $(patsubst src/%.c,build/%.o,$(SRC))
 
-OBJ = $(SRC:src/%.c=build/%.o)
+# Tests
+TEST_SRC := $(wildcard tests/test_*.c)
+TEST_EXE := $(patsubst tests/%.c,build/tests/%,$(TEST_SRC))
 
+# Default target
+all: $(OBJ)
 
-TEST_SRC = tests/test_disk.c
-TEST_EXE = build/test_disk
-
-TARGET = build/filesystem
-
-all: $(TARGET)
-
-$(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $(TARGET)
-
-$(TEST_EXE): $(OBJ) $(TEST_SRC)
-	mkdir -p build
-	$(CC) $(CFLAGS) $(OBJ) $(TEST_SRC) -o $(TEST_EXE)
-
+# Compile library objects
 build/%.o: src/%.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
--include $(OBJ:.o=.d)
+# Build one test executable
+build/tests/test_%: tests/test_%.c $(OBJ)
+	mkdir -p build/tests
+	$(CC) $(CFLAGS) $(OBJ) $< -o $@
 
+# Run every test
+test: $(TEST_EXE)
+	@for test in $(TEST_EXE); do \
+		echo "Running $$test"; \
+		./$$test; \
+	done
+
+# Remove build directory
 clean:
 	rm -rf build
 
-test_disk: $(TEST_EXE)
-	./$(TEST_EXE)
+# Dependency files
+-include $(OBJ:.o=.d)
 
-.PHONY: all clean test_disk
+.PHONY: all test clean

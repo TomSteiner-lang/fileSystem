@@ -24,7 +24,7 @@ int main(void) {
         .block_size = 4096,
         .block_count = 64,
         .root_dir_index = 1,
-        .allocation_table_index = 2
+        .bitmap_index = 2
     };
 
     assert(!superblock_write(disk, &sb));
@@ -38,7 +38,7 @@ int main(void) {
     assert(fromdisk.block_size == 4096);
     assert(fromdisk.block_count == 64);
     assert(fromdisk.root_dir_index == 1);
-    assert(fromdisk.allocation_table_index == 2);
+    assert(fromdisk.bitmap_index == 2);
 
 
     

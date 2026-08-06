@@ -11,7 +11,7 @@ struct superblock {
     uint64_t block_size;
     uint64_t block_count;
     uint64_t root_dir_index;
-    uint64_t allocation_table_index;
+    uint64_t bitmap_index;
 };
 
 int superblock_read(struct disk* disk, struct superblock* superblock);

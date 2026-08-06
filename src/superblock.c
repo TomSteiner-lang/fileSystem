@@ -43,11 +43,11 @@ int superblock_validate(const struct disk* disk, const struct superblock* superb
         return -1;
     }
 
-    if (superblock->allocation_table_index< 1 || superblock->allocation_table_index > superblock->block_count) {
+    if (superblock->bitmap_index< 1 || superblock->bitmap_index > superblock->block_count) {
         return -1;
     }
 
-    if (superblock->allocation_table_index == superblock->root_dir_index) {
+    if (superblock->bitmap_index == superblock->root_dir_index) {
         return -1;
     }
 

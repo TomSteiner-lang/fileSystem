@@ -71,7 +71,7 @@ int disk_close(struct disk* disk) {
     return 0;
 }
 
-ssize_t disk_read(struct disk* disk, void* buffer, off_t offset, size_t count) {
+ssize_t disk_read(const struct disk* disk, void* buffer, off_t offset, size_t count) {
     if (offset < 0) {
         return -1;
     }

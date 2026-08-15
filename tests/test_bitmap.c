@@ -4,6 +4,7 @@
 #include "../include/disk.h"
 #include "../include/superblock.h"
 #include "../include/bitmap.h"
+#include "../include/filesystem.h"
 
 #define TEST_PATH "./images/test.img"
 #define TEST_DISK_SIZE 1024 * 1024 * 1
@@ -28,7 +29,12 @@ int main(void) {
         .bitmap_index = 2
     };
 
-    assert(!superblock_write(disk, &sb));
+    struct filesystem fs = {
+        .sb = &sb,
+        .disk = disk
+    };
+
+    assert(!superblock_write(&fs));
     
     struct superblock fromdisk = {0};
 
@@ -64,15 +70,16 @@ int main(void) {
     assert(allocated == 3);
     assert(bitmap_is_set(&bm, 3));
 
+    fs.bm = &bm;
 
-    assert(bitmap_flush(disk, &fromdisk, &bm) == 1);
+    assert(bitmap_flush(&fs) == 1);
     
 
     uint64_t block_count = bm.block_count;
     uint64_t byte_count = bm.byte_count;
     bitmap_destroy(&bm);
 
-    assert(!bitmap_load(disk, &fromdisk, &bm));
+    assert(!bitmap_load(&fs));
     assert(bm.byte_count == byte_count);
     assert(bm.block_count == block_count);
 

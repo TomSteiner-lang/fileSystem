@@ -52,12 +52,12 @@ int filesystem_unmount(struct filesystem* fs) {
 
     size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
     
-    if (bitmap_flush(fs->disk, fs->sb, fs->bm) != bitmap_size) {
+    if (bitmap_flush(fs) != bitmap_size) {
         //corrupted disk
         return -1;
     }
 
-    if (superblock_write(fs->disk, fs->sb) < 0) {
+    if (superblock_write(fs) < 0) {
         //corrupted disk
         return -1;
     }
@@ -88,6 +88,11 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         return NULL;
     }
 
+    
+    fs->disk = disk;
+    fs->sb = sb;
+    fs->bm = bm;
+
     if (superblock_read(disk, sb) < 0) {
         free(fs);
         free(sb);
@@ -102,16 +107,13 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         return NULL;
     }
 
-    if (bitmap_load(disk, sb, bm) < 0) {
+    if (bitmap_load(fs) < 0) {
         free(fs);
         free(sb);
         free(bm);
         return NULL;
     }
 
-    fs->disk = disk;
-    fs->sb = sb;
-    fs->bm = bm;
     return fs;
 }
 
@@ -130,9 +132,9 @@ int filesystem_create(struct disk* disk, size_t block_size) {
         return -1;
     }
     
-    // struct filesystem filesystem = {0};
+    struct filesystem filesystem = {0};
 
-    // struct filesystem* fs = &filesystem;
+    struct filesystem* fs = &filesystem;
 
     struct superblock superblock = {0};
 
@@ -141,6 +143,10 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     struct bitmap bitmap = {0};
 
     struct bitmap* bm = &bitmap;
+
+    fs->bm = bm;
+    fs->sb = sb;
+    fs->disk = disk;
 
     sb->identifier = FS_IDENTIFIER;
     sb->block_size = block_size;
@@ -156,7 +162,10 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     sb->root_dir_index = sb->bitmap_index + bitmap_size;
 
 
-    superblock_write(disk, sb);
+    if (superblock_write(fs) < 0) {
+        bitmap_destroy(bm);
+        return -1;
+    }
 
     //superblock
     if (bitmap_set(bm, 0) < 0) {
@@ -187,7 +196,7 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     
     }
 
-    if (bitmap_flush(disk, sb, bm) != bitmap_size) {
+    if (bitmap_flush(fs) != bitmap_size) {
         bitmap_destroy(bm);
         return -1;
     }

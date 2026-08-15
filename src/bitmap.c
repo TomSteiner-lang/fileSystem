@@ -5,6 +5,7 @@
 #include "../include/disk.h"
 #include "../include/superblock.h"
 #include "../include/bitmap.h"
+#include "../include/filesystem.h"
 
 
 //bitmap create
@@ -98,19 +99,18 @@ int bitmap_free(struct bitmap* bm, size_t block) {
     return 0;
 }
 
-size_t bitmap_flush(struct disk* disk, const struct superblock* sb, const struct bitmap* bm) {
+size_t bitmap_flush(struct filesystem* fs) {
     //returns amount of blocks successfully written to disk
-    size_t blocks = bm->byte_count/sb->block_size;
-    if (bm->byte_count % sb->block_size != 0) blocks++;
+    size_t blocks = fs->bm->byte_count/fs->sb->block_size;
+    if (fs->bm->byte_count % fs->sb->block_size != 0) blocks++;
   
     
     for (size_t i = 0; i < blocks; i++) {
         //block_write(blockno)
-        ssize_t written = disk_write(disk, bm->bits + i * sb->block_size, (off_t)(sb->bitmap_index + i) * sb->block_size, sb->block_size);
+        int written = filesystem_flush_block(fs, fs->bm->bits + fs->sb->block_size * i, fs->sb->bitmap_index + i);
         
         if (written < 0) return i;
 
-        if ((uint64_t) written != sb->block_size) return i;
     }
     return blocks;
 }
@@ -123,29 +123,30 @@ void bitmap_destroy(struct bitmap* bm) {
     return;
 }
 
-int bitmap_load(const struct disk* disk,const struct superblock* sb, struct bitmap* bm) {
+int bitmap_load(struct filesystem* fs) {
 
-    uint64_t bytes = sb->block_count / 8;
-    if (sb->block_count % 8) {
+    uint64_t bytes = fs->sb->block_count / 8;
+    if (fs->sb->block_count % 8) {
         bytes++;
     }
-    size_t blocks = bytes/sb->block_size;
-    if (bytes % sb->block_size) blocks++;
+    size_t blocks = bytes/fs->sb->block_size;
+    if (bytes % fs->sb->block_size) blocks++;
 
-    uint8_t* bits = malloc(blocks * sb->block_size);
+    uint8_t* bits = malloc(blocks * fs->sb->block_size);
 
     if (bits == NULL) return -1;
 
-    ssize_t read = disk_read(disk, bits, sb->block_size * sb->bitmap_index,blocks * sb->block_size);
-    if (read < 0) return -1;
-    if ((uint64_t) read != blocks * sb->block_size) {
-        free(bits);
-        return -1;
+    for (size_t i = 0; i < blocks; i++) {
+        int res = filesystem_load_block(fs, bits + fs->sb->block_size * i, fs->sb->bitmap_index + i);
+        if (res < 0){ 
+            free(bits);
+            return res;
+        }
     }
 
-    bm->bits = bits;
-    bm->block_count = sb->block_count;
-    bm->byte_count = bytes;
+    fs->bm->bits = bits;
+    fs->bm->block_count = fs->sb->block_count;
+    fs->bm->byte_count = bytes;
 
 
     return 0;

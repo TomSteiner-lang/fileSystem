@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include "../include/disk.h"
 #include "../include/superblock.h"
+#include "../include/filesystem.h"
 
 #define TEST_PATH "./images/test.img"
 #define TEST_DISK_SIZE 1024 * 1024 * 1
@@ -27,7 +28,12 @@ int main(void) {
         .bitmap_index = 2
     };
 
-    assert(!superblock_write(disk, &sb));
+    struct filesystem fs = {
+        .sb = &sb,
+        .disk = disk,
+        .bm = NULL
+    };
+    assert(!superblock_write(&fs));
 
     struct superblock fromdisk = {0};
 

@@ -3,8 +3,10 @@
 //superblock_validate
 
 #include <stdlib.h>
+#include <string.h>
 #include "../include/superblock.h"
 #include "../include/disk.h"
+#include "../include/filesystem.h"
 
 int superblock_read(struct disk* disk, struct superblock* superblock) {
     
@@ -19,11 +21,18 @@ int superblock_read(struct disk* disk, struct superblock* superblock) {
     return 0;
 }
 
-int superblock_write(struct disk* disk, const struct superblock* superblock) {
-    ssize_t written = disk_write(disk, superblock, 0, sizeof(*superblock));
-    if (written != sizeof(*superblock)) {
-        return -1;
-    }
+int superblock_write(struct filesystem* fs) {
+    
+    uint8_t block[fs->sb->block_size];
+    memset(block, 0, sizeof(block));
+    
+    
+    memcpy(block, fs->sb, sizeof(*fs->sb));
+    
+    int res = filesystem_flush_block(fs, block, 0);
+    
+    if (res < 0) return res;
+
     return 0;
 }
 

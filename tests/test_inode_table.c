@@ -5,11 +5,12 @@
 #include <stdio.h>
 #include <errno.h>
 #include "../include/filesystem.h"
-
+#include "../include/inode_table.h"
 
 #define TEST_PATH "./images/test.img"
 #define TEST_DISK_SIZE 1024 * 1024 * 1
 #define TEST_BLOCK_SIZE 1024
+
 
 int main(void) {
     unlink(TEST_PATH);
@@ -21,38 +22,23 @@ int main(void) {
     assert(!created);
     struct disk * disk = disk_open(TEST_PATH);
 
-
+    
     assert(filesystem_create(disk, TEST_BLOCK_SIZE) == 0);
 
     struct filesystem* fs = filesystem_mount(disk);
+
+    assert(inode_table_add(fs->it, INODE_FILE) == 1);
     
-    assert(fs != NULL);
-    assert(fs->disk == disk);
-    assert(fs->sb->identifier == FS_IDENTIFIER);
-    assert(fs->sb->block_size == TEST_BLOCK_SIZE);
-    assert(fs->sb->block_count == TEST_DISK_SIZE / TEST_BLOCK_SIZE);
-    assert(fs->sb->bitmap_index == 2);
-    assert(fs->sb->root_dir_index == 13);
-
-
-
+    assert(inode_table_add(fs->it, INODE_DIRECTORY) == 2);
     
-    for (int i = 0; i < 4; i++) {
-        assert(bitmap_is_set(fs->bm, i));
-    }
-
-    assert(!bitmap_is_set(fs->bm, 100));
-
-    bitmap_set(fs->bm, 100);
-    assert(bitmap_is_set(fs->bm, 100));
-
     assert(!filesystem_unmount(fs));
 
-    fs = filesystem_mount(disk);
-    
-    assert(bitmap_is_set(fs->bm, 100));
+    struct filesystem* fs2 = filesystem_mount(disk);
 
-    assert(!filesystem_unmount(fs));
+    assert(inode_table_add(fs2->it, INODE_FILE) == 3);
+
+    inode_table_remove(fs2->it, 2);
+    assert(inode_table_add(fs2->it, INODE_DIRECTORY) == 2);
 
 
     assert(!disk_close(disk));

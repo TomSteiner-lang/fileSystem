@@ -3,17 +3,19 @@
 
 #define FS_MIN_SIZE 1024 * 128
 #define FS_MIN_BLOCKS 128
-
+#define FS_INODE_BLOCKS 10
 
 
 #include "./disk.h"
 #include "./superblock.h"
 #include "./bitmap.h"
+#include "./inode_table.h"
 
 struct filesystem {
     struct disk* disk;
     struct superblock* sb;
     struct bitmap* bm;
+    struct inode_table* it;
 };
 
 int filesystem_flush_block(struct filesystem* fs,const void* block ,size_t block_number);

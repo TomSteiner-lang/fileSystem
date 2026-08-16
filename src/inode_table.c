@@ -90,6 +90,12 @@ int inode_table_load(struct filesystem* fs) {
 
 }
 
+struct inode* inode_table_get(struct inode_table* it, size_t index) {
+    if (index >= it->max_inodes) return NULL;
+
+    return it->inodes + index;
+}
+
 size_t inode_table_flush(struct filesystem* fs) {
 
     for (size_t i = 0; i < fs->sb->inode_table_size; i++) {

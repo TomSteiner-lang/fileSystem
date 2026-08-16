@@ -12,6 +12,8 @@ struct inode_table {
     struct inode* inodes;
 };
 
+
+struct inode* inode_table_get(struct inode_table* it, size_t index);
 size_t inode_table_add(struct inode_table* it, int type);
 void inode_table_remove(struct inode_table* it, size_t index);
 int inode_table_create(const struct superblock* sb, struct inode_table* it);

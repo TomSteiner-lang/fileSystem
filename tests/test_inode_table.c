@@ -40,7 +40,9 @@ int main(void) {
     inode_table_remove(fs2->it, 2);
     assert(inode_table_add(fs2->it, INODE_DIRECTORY) == 2);
 
+    struct inode* inode = inode_table_get(fs2->it, 2);
 
+    assert(inode->type == INODE_DIRECTORY);
     assert(!disk_close(disk));
 
     assert(!unlink(TEST_PATH));

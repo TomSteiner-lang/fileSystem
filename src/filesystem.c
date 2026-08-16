@@ -5,12 +5,174 @@
 #include "../include/superblock.h"
 #include "../include/bitmap.h"
 #include "../include/filesystem.h"
+#include "../include/file.h"
+
+
 //filesystem_create
 //filesystem_mount
+//filesystem_load_block
+//filesystem_flush_block
 //filesystem_create_file
 //filesystem_delete_file
 
+struct file* filesystem_create_file(struct filesystem* fs, int type) {
+    
+    struct file* file = malloc(sizeof(struct file));
+    if (file == NULL) {
+        return NULL;
+    }
 
+
+    size_t inode_index = inode_table_add(fs->it, type);
+    if (inode_index == 0) {
+        free(file);
+        return NULL;
+    }
+
+    struct inode* inode = inode_table_get(fs->it, inode_index);
+    if (inode == NULL) {
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    
+    size_t index_block = 0;
+    if (bitmap_allocate(fs->bm, &index_block) < 0) {
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    inode->index = index_block;
+    size_t data_block = 0;
+    if (bitmap_allocate(fs->bm, &data_block) < 0) {
+        bitmap_free(fs->bm, index_block);
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    inode->blocks = 1;
+    file->inode = inode_index;
+ 
+    size_t* index = calloc(1, fs->sb->block_size);
+    if (index == NULL) {
+        bitmap_free(fs->bm, data_block);
+        bitmap_free(fs->bm, index_block);
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    index[0] = data_block;
+
+    if (filesystem_flush_block(fs, index, index_block) < 0) {
+        free(index);
+        bitmap_free(fs->bm, data_block);
+        bitmap_free(fs->bm, index_block);
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+    free(index);
+
+    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
+    
+
+    if (bitmap_flush(fs) < bitmap_size) {        
+        bitmap_free(fs->bm, data_block);
+        bitmap_free(fs->bm, index_block);
+        bitmap_flush(fs);
+        inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+               
+        bitmap_free(fs->bm, data_block);
+        bitmap_free(fs->bm, index_block);
+        bitmap_flush(fs);
+        inode_table_remove(fs->it, inode_index);
+        inode_table_flush(fs);
+        free(file);
+        return NULL;
+    }
+
+    return file;
+
+}
+
+int filesystem_delete_file(struct filesystem* fs, struct file* file) {
+    struct inode* inode = inode_table_get(fs->it, file->inode);
+    if (inode == NULL) return -1;
+
+    struct inode inode_copy = *inode; 
+
+    size_t* index_block = calloc(1, fs->sb->block_size);
+    if (index_block == NULL) return -1;
+
+    int loaded = filesystem_load_block(fs, (void*)index_block, inode->index);
+
+    if (loaded < 0) {
+        free(index_block);
+        return -1;
+    }
+
+    for (size_t i = 0; i < inode->blocks; i++) {
+        int freed = bitmap_free(fs->bm, index_block[i]);
+        if (freed < 0) {
+            for (size_t j = 0; j < i; j++) {
+                bitmap_set(fs->bm, index_block[j]);
+            }
+            free(index_block);
+            return -1;
+        }
+    }
+
+    if (bitmap_free(fs->bm, inode->index) < 0) {
+        for (size_t i = 0; i < inode->blocks; i++) {
+            bitmap_set(fs->bm, index_block[i]);
+        }
+        free(index_block);
+        return -1;
+    }
+    
+
+
+    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
+
+    if (bitmap_flush(fs) < bitmap_size) {
+        bitmap_set(fs->bm, inode->index);
+        for (size_t i = 0; i < inode->blocks; i++) {
+            bitmap_set(fs->bm, index_block[i]);
+        }
+        bitmap_flush(fs);
+        free(index_block);
+        return -1;
+    }
+
+
+    inode_table_remove(fs->it, file->inode);
+
+    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+        inode_table_set(fs->it, &inode_copy, file->inode);
+        bitmap_set(fs->bm, inode_copy.index);
+        for (size_t i = 0; i < inode_copy.blocks; i++) {
+            bitmap_set(fs->bm, index_block[i]);
+        }
+        bitmap_flush(fs);
+        free(index_block);
+        return -1;
+    }
+
+    free(index_block);
+    free(file);
+    return 0;
+
+
+}
 
 int filesystem_flush_block(struct filesystem* fs,const void* block ,size_t block_number) {
     if (block_number >= fs->sb->block_count) {

@@ -12,7 +12,7 @@ struct inode_table {
     struct inode* inodes;
 };
 
-
+int inode_table_set(struct inode_table* it, struct inode* inode, size_t index);
 struct inode* inode_table_get(struct inode_table* it, size_t index);
 size_t inode_table_add(struct inode_table* it, int type);
 void inode_table_remove(struct inode_table* it, size_t index);

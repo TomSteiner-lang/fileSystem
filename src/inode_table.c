@@ -90,6 +90,16 @@ int inode_table_load(struct filesystem* fs) {
 
 }
 
+int inode_table_set(struct inode_table* it, struct inode* inode, size_t index) {
+    if (index >= it->max_inodes) return -1;
+
+    it->inodes[index].type = inode->type;
+    it->inodes[index].blocks = inode->blocks;
+    it->inodes[index].index = inode->index;
+
+    return 0;
+}
+
 struct inode* inode_table_get(struct inode_table* it, size_t index) {
     if (index >= it->max_inodes) return NULL;
 

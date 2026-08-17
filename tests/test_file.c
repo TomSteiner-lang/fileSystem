@@ -38,7 +38,7 @@ int main(void) {
     struct inode* inode = inode_table_get(fs->it, inode_index);
     assert(inode->type == INODE_DIRECTORY);
     assert(bitmap_is_set(fs->bm, inode->index));
-    
+    assert(inode->blocks == 1);
     size_t* index_block = calloc(1, fs->sb->block_size);
 
     if (index_block == NULL) {
@@ -53,9 +53,62 @@ int main(void) {
         return 1;
     }
 
-    assert(filesystem_load_block(fs, index_block,inode_index) == 0);
+    assert(filesystem_load_block(fs, index_block,inode->index) == 0);
+    assert(index_block[0] != 0);
 
     assert(bitmap_is_set(fs->bm, index_block[0]));
+
+    memset(index_block,0,fs->sb->block_size);
+
+    assert(file_append_block(fs, file) == 0);
+    assert(file_append_block(fs, file) == 0);
+    
+    
+    assert(filesystem_load_block(fs, index_block,inode->index) == 0);
+    
+    assert(inode->blocks == 3);
+    assert(index_block[0] != 0);
+    assert(index_block[1] != 0);
+    assert(index_block[2] != 0);
+    
+    assert(bitmap_is_set(fs->bm, index_block[0]));
+    assert(bitmap_is_set(fs->bm, index_block[1]));
+    assert(bitmap_is_set(fs->bm, index_block[2]));
+
+    assert(file_pop_block(fs,file) == 0);
+    assert(inode->blocks == 2);
+    assert(bitmap_is_set(fs->bm, index_block[0]));
+    assert(bitmap_is_set(fs->bm, index_block[1]));
+    assert(bitmap_is_set(fs->bm, index_block[2]) == 0);
+
+    char* buff = calloc(1, fs->sb->block_size);
+    if (buff == NULL) {
+        printf("test failed because of malloc\n");
+        free(index_block);
+        assert(!filesystem_unmount(fs));
+
+
+        assert(!disk_close(disk));
+
+        assert(!unlink(TEST_PATH));
+        
+        return 1;
+    }
+
+    char message[] = "hello world\n";
+    memcpy(buff, message, sizeof(message));
+
+    assert(file_write_block(fs, file, buff, 1) == 0);
+
+    memset(buff, 0, fs->sb->block_size);
+    
+    assert(file_read_block(fs, file, buff, 1) == 0);
+
+    assert(!strcmp(buff, "hello world\n"));
+
+    free(buff);
+
+
 
     free(index_block);
 

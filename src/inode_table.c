@@ -96,6 +96,7 @@ int inode_table_set(struct inode_table* it, struct inode* inode, size_t index) {
     it->inodes[index].type = inode->type;
     it->inodes[index].blocks = inode->blocks;
     it->inodes[index].index = inode->index;
+    it->inodes[index].entries = inode->entries;
 
     return 0;
 }

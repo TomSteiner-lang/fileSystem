@@ -14,6 +14,7 @@ struct inode {
     uint8_t type;
     size_t blocks;
     size_t index;
+    size_t entries;
 };
 
 

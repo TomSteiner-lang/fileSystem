@@ -1,5 +1,6 @@
 
-#include "stdlib.h"
+#include <stdlib.h>
+#include <string.h>
 
 #include "../include/disk.h"
 #include "../include/superblock.h"
@@ -17,7 +18,7 @@
 
 struct file* filesystem_create_file(struct filesystem* fs, int type) {
     
-    struct file* file = malloc(sizeof(struct file));
+    struct file* file = calloc(1, sizeof(struct file));
     if (file == NULL) {
         return NULL;
     }
@@ -77,14 +78,23 @@ struct file* filesystem_create_file(struct filesystem* fs, int type) {
     }
     free(index);
 
-    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
     
+    int res = bitmap_flush(fs);
 
-    if (bitmap_flush(fs) < bitmap_size) {        
+    if (res == BITMAP_INDETERMINATE) {
+        res = bitmap_validate_flush(fs);
+    }
+
+    if (res == BITMAP_FAIL) {        
         bitmap_free(fs->bm, data_block);
         bitmap_free(fs->bm, index_block);
-        bitmap_flush(fs);
         inode_table_remove(fs->it, inode_index);
+        free(file);
+        return NULL;
+    }
+
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic faliure recovery
         free(file);
         return NULL;
     }
@@ -141,14 +151,23 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
     
 
 
-    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
+    int res = bitmap_flush(fs);
 
-    if (bitmap_flush(fs) < bitmap_size) {
+    if (res == BITMAP_INDETERMINATE) {
+        res = bitmap_validate_flush(fs);
+    }
+
+    if (res == BITMAP_FAIL) {
         bitmap_set(fs->bm, inode->index);
         for (size_t i = 0; i < inode->blocks; i++) {
             bitmap_set(fs->bm, index_block[i]);
         }
-        bitmap_flush(fs);
+        free(index_block);
+        return -1;
+    }
+
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic faliure recovery
         free(index_block);
         return -1;
     }
@@ -208,7 +227,7 @@ int filesystem_load_block(struct filesystem* fs,void* block ,size_t block_number
 }
 
 int filesystem_unmount(struct filesystem* fs) {
-
+//todo - make transactional
     //flush all dirty blocks
 
 
@@ -217,10 +236,21 @@ int filesystem_unmount(struct filesystem* fs) {
         return -1;
     }
 
-    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
     
-    if (bitmap_flush(fs) != bitmap_size) {
-        //corrupted disk
+    int res = bitmap_flush(fs);
+    
+
+    if (res == BITMAP_INDETERMINATE) {
+        res = bitmap_validate_flush(fs);
+    }
+
+    if (res == BITMAP_FAIL) {
+        //rollback
+        return -1;
+    }
+
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic faliure recovery
         return -1;
     }
 
@@ -234,30 +264,34 @@ int filesystem_unmount(struct filesystem* fs) {
     bitmap_destroy(fs->bm);
     free(fs->bm);
     free(fs->sb);
-    free(fs);
+    
 
+    memset(fs, 0, sizeof(struct filesystem));
+
+
+    free(fs);
     return 0;
 }
 
 struct filesystem* filesystem_mount(struct disk* disk) {
     
-    struct filesystem* fs = malloc(sizeof(struct filesystem));
+    struct filesystem* fs = calloc(1, sizeof(struct filesystem));
     if (fs == NULL) return NULL;
 
-    struct superblock* sb = malloc(sizeof(struct superblock));
+    struct superblock* sb = calloc(1, sizeof(struct superblock));
     if (sb == NULL) {
         free(fs);
         return NULL;
     }
     
-    struct bitmap* bm = malloc(sizeof(struct bitmap));
+    struct bitmap* bm = calloc(1, sizeof(struct bitmap));
     if (bm == NULL) {
         free(fs);
         free(sb);
         return NULL;
     }
 
-    struct inode_table* it = malloc(sizeof(struct inode_table));
+    struct inode_table* it = calloc(1, sizeof(struct inode_table));
     if (it == NULL) {
         free(fs);
         free(sb);
@@ -286,13 +320,17 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         return NULL;
     }
 
-    if (bitmap_load(fs) < 0) {
+    if (bitmap_load(fs) != BITMAP_SUCCESS) {
+    
+    
         free(fs);
         free(sb);
         free(bm);
         free(it);
         return NULL;
     }
+
+    
 
     if (inode_table_load(fs) < 0) {
         free(fs);
@@ -306,6 +344,8 @@ struct filesystem* filesystem_mount(struct disk* disk) {
     return fs;
 }
 
+
+//
 int filesystem_create(struct disk* disk, size_t block_size) {
     
     if ((block_size % 1024) || (block_size < 1024)) {
@@ -353,8 +393,9 @@ int filesystem_create(struct disk* disk, size_t block_size) {
         return -1;
     }
 
+    size_t bitmap_area_size = 2 * bitmap_size + 1;
 
-    sb->inode_table_index = sb->bitmap_index + bitmap_size;
+    sb->inode_table_index = sb->bitmap_index + bitmap_area_size;
     sb->inode_table_size = FS_INODE_BLOCKS;
     sb->root_dir_index = sb->inode_table_index + FS_INODE_BLOCKS;
 
@@ -387,7 +428,7 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     }
     
     //bitmap
-    for (size_t i = 0; i < bitmap_size; i++) {
+    for (size_t i = 0; i < bitmap_area_size; i++) {
         if (bitmap_set(bm, sb->bitmap_index + i) < 0) {
             bitmap_destroy(bm);
             inode_table_destroy(it);
@@ -412,7 +453,15 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     
     }
 
-    if (bitmap_flush(fs) != bitmap_size) {
+
+    int res = bitmap_flush(fs);
+
+    if (res == BITMAP_INDETERMINATE) {
+        res = bitmap_validate_flush(fs);
+    }
+
+    if (res != BITMAP_SUCCESS) {
+        //dont care about indeterminate because the filesystem is empty
         bitmap_destroy(bm);
         inode_table_destroy(it);
         return -1;

@@ -115,15 +115,23 @@ int file_append_block(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
-    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
 
 
-    if (bitmap_flush(fs) < bitmap_size) {
-        //bitmap corrupted
+    int res = bitmap_flush(fs);
+    
+    if (res == BITMAP_INDETERMINATE) res = bitmap_validate_flush(fs);
+
+
+    if (res == BITMAP_FAIL) {
         inode->blocks--;
         inode_table_flush(fs);
         bitmap_free(fs->bm, newblock);
-        bitmap_flush(fs);
+        free(index_block);
+        return -1;
+    }
+
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic faliure recovery
         free(index_block);
         return -1;
     }
@@ -165,18 +173,26 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
+    int res = bitmap_flush(fs);
 
-    size_t bitmap_size = (((fs->sb->block_count + 7) / 8) + fs->sb->block_size - 1) / fs->sb->block_size;
-
-
-    if (bitmap_flush(fs) < bitmap_size) {
+    if (res == BITMAP_INDETERMINATE) res = bitmap_validate_flush(fs);
+    
+    
+    if (res == BITMAP_FAIL) {
         inode->blocks++;
         inode_table_flush(fs);
         bitmap_set(fs->bm, index_block[inode->blocks-1]);
-        bitmap_flush(fs);
         free(index_block);
         return -1;
     }
+
+    
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic faliure recovery
+        free(index_block);
+        return -1;
+    }
+
 
     free(index_block);
     return 0;

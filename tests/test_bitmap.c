@@ -72,16 +72,24 @@ int main(void) {
 
     fs.bm = &bm;
 
-    assert(bitmap_flush(&fs) == 1);
-    
+    //set: 0,1,2,3,4
+    assert(bitmap_flush(&fs) == BITMAP_SUCCESS);
 
     uint64_t block_count = bm.block_count;
     uint64_t byte_count = bm.byte_count;
+
     bitmap_destroy(&bm);
 
-    assert(!bitmap_load(&fs));
+    assert(bitmap_load(&fs) == BITMAP_SUCCESS);
+
+
+
     assert(bm.byte_count == byte_count);
     assert(bm.block_count == block_count);
+
+
+
+
 
     for (int i = 0; i <=4; i++) {
         assert(bitmap_is_set(&bm, i));

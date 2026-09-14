@@ -1,7 +1,6 @@
 #ifndef FS_SUPERBLOCK
 #define FS_SUPERBLOCK
 
-#include <stdint.h>
 #include "disk.h"
 
 
@@ -10,12 +9,12 @@
 struct filesystem;
 
 struct superblock {
-    uint64_t identifier;
-    uint64_t block_size;
+    size_t identifier;
+    size_t block_size;
     size_t block_count;
-    uint64_t root_dir_index;
-    uint64_t bitmap_index;
-    uint64_t inode_table_index;
+    size_t root_dir_index;
+    size_t bitmap_index; //bitmap is followed by another block, then another bitmap
+    size_t inode_table_index;
     size_t inode_table_size;
 };
 

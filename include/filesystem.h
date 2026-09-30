@@ -4,18 +4,20 @@
 #define FS_MIN_SIZE 1024 * 128
 #define FS_MIN_BLOCKS 128
 #define FS_INODE_BLOCKS 10
-
+#define FS_TRANSACTION_BLOCKS 10
 
 #include "./disk.h"
 #include "./superblock.h"
 #include "./bitmap.h"
 #include "./inode_table.h"
+#include "./transaction.h"
 
 struct filesystem {
     struct disk* disk;
     struct superblock* sb;
     struct bitmap* bm;
     struct inode_table* it;
+    struct transaction_table* tt;
 };
 struct file* filesystem_create_file(struct filesystem* fs, int type);
 int filesystem_delete_file(struct filesystem* fs, struct file* file);

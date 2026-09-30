@@ -16,6 +16,9 @@ struct superblock {
     size_t bitmap_index; //bitmap is followed by another block, then another bitmap
     size_t inode_table_index;
     size_t inode_table_size;
+    size_t transaction_table_index;
+    size_t transaction_table_size;
+
 };
 
 int superblock_read(struct disk* disk, struct superblock* superblock);

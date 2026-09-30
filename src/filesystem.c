@@ -231,6 +231,12 @@ int filesystem_unmount(struct filesystem* fs) {
     //flush all dirty blocks
 
 
+
+    //resolve all transactions
+
+
+
+
     if (inode_table_flush(fs) != FS_INODE_BLOCKS) {
         //corrupted disk
         return -1;
@@ -259,6 +265,8 @@ int filesystem_unmount(struct filesystem* fs) {
         return -1;
     }
     
+    transaction_table_destroy(fs->tt);
+    free(fs->tt);
     inode_table_destroy(fs->it);
     free(fs->it);
     bitmap_destroy(fs->bm);
@@ -298,17 +306,28 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         free(bm);
         return NULL;
     }
+
+    struct transaction_table* tt = calloc(1, sizeof(struct transaction_table));
+    if (tt == NULL) {
+        free(fs);
+        free(sb);
+        free(bm);
+        free(it);
+        return NULL;
+    }
     
     fs->disk = disk;
     fs->sb = sb;
     fs->bm = bm;
     fs->it = it;
+    fs->tt = tt;
 
     if (superblock_read(disk, sb) < 0) {
         free(fs);
         free(sb);
         free(bm);
         free(it);
+        free(tt);
         return NULL;
     }
 
@@ -317,6 +336,7 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         free(sb);
         free(bm);
         free(it);
+        free(tt);
         return NULL;
     }
 
@@ -327,10 +347,11 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         free(sb);
         free(bm);
         free(it);
+        free(tt);
         return NULL;
     }
 
-    
+    //cleanup all of the transactions
 
     if (inode_table_load(fs) < 0) {
         free(fs);
@@ -338,7 +359,18 @@ struct filesystem* filesystem_mount(struct disk* disk) {
         bitmap_destroy(bm);
         free(bm);
         free(it);
+        free(tt);
         return NULL;
+    }
+
+    if (transaction_table_create(sb, tt) < 0) {
+        free(fs);
+        free(sb);
+        bitmap_destroy(bm);
+        inode_table_destroy(it);
+        free(bm);
+        free(it);
+        free(tt);
     }
 
     return fs;
@@ -377,10 +409,16 @@ int filesystem_create(struct disk* disk, size_t block_size) {
 
     struct inode_table* it = &inode_table;
 
+    struct transaction_table transaction_table = {0};
+
+    struct transaction_table* tt = &transaction_table;
+
+
     fs->bm = bm;
     fs->sb = sb;
     fs->disk = disk;
     fs->it = it;
+    fs->tt = tt;
 
     sb->identifier = FS_IDENTIFIER;
     sb->block_size = block_size;
@@ -397,7 +435,9 @@ int filesystem_create(struct disk* disk, size_t block_size) {
 
     sb->inode_table_index = sb->bitmap_index + bitmap_area_size;
     sb->inode_table_size = FS_INODE_BLOCKS;
-    sb->root_dir_index = sb->inode_table_index + FS_INODE_BLOCKS;
+    sb->transaction_table_index = sb->inode_table_index + sb->inode_table_size;
+    sb->transaction_table_size = FS_TRANSACTION_BLOCKS;
+    sb->root_dir_index = sb->transaction_table_index + sb->transaction_table_size;
 
     if(inode_table_create(sb,it) < 0) {
         bitmap_destroy(bm);
@@ -405,9 +445,16 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     }
 
 
+    if (transaction_table_create(sb, tt) < 0) {
+        bitmap_destroy(bm);
+        inode_table_destroy(it);
+        return -1;
+    }
+
     if (superblock_write(fs) < 0) {
         bitmap_destroy(bm);
         inode_table_destroy(it);
+        transaction_table_destroy(tt);
         return -1;
     }
 
@@ -415,6 +462,7 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     if (bitmap_set(bm, 0) < 0) {
         bitmap_destroy(bm);
         inode_table_destroy(it);
+        transaction_table_destroy(tt);
         return -1;
     
     }
@@ -423,6 +471,7 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     if (bitmap_set(bm, 1) < 0) {
         bitmap_destroy(bm);
         inode_table_destroy(it);
+        transaction_table_destroy(tt);
         return -1;
     
     }
@@ -432,6 +481,7 @@ int filesystem_create(struct disk* disk, size_t block_size) {
         if (bitmap_set(bm, sb->bitmap_index + i) < 0) {
             bitmap_destroy(bm);
             inode_table_destroy(it);
+            transaction_table_destroy(tt);
             return -1;
         }
     }
@@ -441,6 +491,16 @@ int filesystem_create(struct disk* disk, size_t block_size) {
         if (bitmap_set(bm, sb->inode_table_index + i) < 0) {
             bitmap_destroy(bm);
             inode_table_destroy(it);
+            transaction_table_destroy(tt);
+            return -1;
+        }
+    }
+
+    for (size_t i = 0; i < sb->transaction_table_size; i++) {
+        if (bitmap_set(bm, sb->transaction_table_index +i) < 0) {
+            bitmap_destroy(bm);
+            inode_table_destroy(it);
+            transaction_table_destroy(tt);
             return -1;
         }
     }
@@ -449,6 +509,8 @@ int filesystem_create(struct disk* disk, size_t block_size) {
     if (bitmap_set(bm, sb->root_dir_index) < 0) {
         bitmap_destroy(bm);
         inode_table_destroy(it);
+        transaction_table_destroy(tt);
+
         return -1;
     
     }
@@ -464,6 +526,8 @@ int filesystem_create(struct disk* disk, size_t block_size) {
         //dont care about indeterminate because the filesystem is empty
         bitmap_destroy(bm);
         inode_table_destroy(it);
+        transaction_table_destroy(tt);
+
         return -1;
     }
 

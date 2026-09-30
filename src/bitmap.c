@@ -35,6 +35,13 @@ int bitmap_create(const struct superblock* sb, struct bitmap* bm) {
         free(bits);
         return -1;
     }
+
+    uint8_t* transaction_bits = calloc(1, blocks * sb->block_size);
+    if (transaction_bits == NULL) {
+        free(marker);
+        free(bits);
+        return -1;
+    }
     
     
 
@@ -44,17 +51,20 @@ int bitmap_create(const struct superblock* sb, struct bitmap* bm) {
     bm->marker = marker;
     bm->marker_state = MARKER_1;
     bm->prev_state = MARKER_1;
+    bm->transaction_bits = transaction_bits;
 
     return 0;
 }
 
-int bitmap_allocate(struct bitmap* bm, size_t* out_block) {
+int bitmap_reserve(struct bitmap* bm, size_t* out_block) {
+    if (out_block == NULL) return -1;
+    
     for (size_t i = 0; i < bm->block_count; i++) {
         int state = bitmap_is_set(bm, i);
         if (state < 0) return state;
-        if (state == 0) {
+        if (state == BLOCK_FREE) {
 
-            int res = bitmap_set(bm, i);
+            int res = bitmap_set_reserved(bm, i);
             if (res < 0) return res;
 
             *out_block = i;
@@ -64,11 +74,26 @@ int bitmap_allocate(struct bitmap* bm, size_t* out_block) {
     return -1;
 }
 
+
+
+
 int bitmap_is_set(const struct bitmap* bm, size_t block) {
     if (block >= bm->block_count) return -1;
     uint8_t byte = bm->bits[block/8];
-    return !!(byte & (1 << (block % 8)));
+    uint8_t transaction_byte = bm->transaction_bits[block/8];
+    if (!!(byte & (1 << (block % 8)))) return BLOCK_ALLOCATED;
+    if (!!(transaction_byte & (1 << (block % 8)))) return BLOCK_RESERVED;
+    return BLOCK_FREE;
 }
+
+int bitmap_is_reserved(const struct bitmap* bm, size_t block) {
+    if (block >= bm->block_count) return -1;
+    uint8_t transaction_byte = bm->transaction_bits[block/8];
+    if (!!(transaction_byte & (1 << (block % 8)))) return BLOCK_RESERVED;
+    return BLOCK_FREE;
+}
+
+
 
 int bitmap_set(struct bitmap* bm, size_t block) {
     
@@ -77,9 +102,33 @@ int bitmap_set(struct bitmap* bm, size_t block) {
 
     
     //double set, replace -2 with enum
-    if (state == 1) return -2;
+    if (state == BLOCK_ALLOCATED) return -2;
 
     uint8_t * byte = &bm->bits[block/8];
+    uint8_t mask = (uint8_t)(1u << (block % 8));
+
+    *byte |= mask;
+
+
+    
+    // if (state == BLOCK_RESERVED) {
+    //     uint8_t * transaction_byte = &bm->transaction_bits[block/8];
+    //     uint8_t transaction_mask = ~mask;
+    //     *transaction_byte &= transaction_mask;
+    // }
+
+    return 0;
+}
+
+int bitmap_set_reserved(struct bitmap* bm, size_t block) {
+    
+    int state = bitmap_is_set(bm, block);
+    if (state < 0) return state;
+
+    
+    if (state != BLOCK_FREE) return -1;
+
+    uint8_t * byte = &bm->transaction_bits[block/8];
     uint8_t mask = (uint8_t)(1u << (block % 8));
 
     *byte |= mask;
@@ -94,7 +143,7 @@ int bitmap_free(struct bitmap* bm, size_t block) {
 
 
     //double free, replace -3 with enum
-    if (state == 0) return -3;
+    if (state != BLOCK_ALLOCATED) return -3;
 
     uint8_t * byte = &bm->bits[block/8];
     uint8_t mask = (uint8_t)~(1u << (block % 8));
@@ -103,6 +152,23 @@ int bitmap_free(struct bitmap* bm, size_t block) {
 
     return 0;
 }
+
+int bitmap_release_reserve(struct bitmap* bm, size_t block) {
+    // if a block is allocated the reservation shouldnt be releasable to give feedback to caller
+    int state = bitmap_is_set(bm, block);
+    if (state < 0) return state;
+
+
+    if (state != BLOCK_RESERVED) return -1;
+
+    uint8_t * byte = &bm->transaction_bits[block/8];
+    uint8_t mask = (uint8_t)~(1u << (block % 8));
+
+    *byte &= mask;
+
+    return 0;
+}
+
 
 
 //
@@ -191,10 +257,12 @@ int bitmap_validate_flush(struct filesystem* fs) {
 
 //
 void bitmap_destroy(struct bitmap* bm) {
-    free(bm->bits);
-    free(bm->marker);
+    if (bm->bits != NULL) free(bm->bits);
+    if (bm->marker != NULL) free(bm->marker);
+    if (bm->transaction_bits != NULL) free(bm->transaction_bits);
     bm->bits = NULL;
     bm->marker = NULL;
+    bm->transaction_bits = NULL;
     bm->block_count = 0;
     bm->byte_count = 0;
     bm->marker_state = MARKER_UNINITIALIZED;
@@ -228,11 +296,14 @@ int bitmap_load(struct filesystem* fs) {
         return BITMAP_FAIL;
     }
 
+    uint8_t* transaction_bits = calloc(1, blocks * fs->sb->block_size);
+    if (transaction_bits == NULL) {
+        free(marker);
+        free(bits);
+        return BITMAP_FAIL;
+    }
 
 
-
-    if (fs->bm->bits != NULL) free(fs->bm->bits);
-    fs->bm->bits = bits;
     if (fs->bm->marker != NULL) free(fs->bm->marker);
     fs->bm->marker = marker;
     fs->bm->block_count = fs->sb->block_count;
@@ -247,6 +318,7 @@ int bitmap_load(struct filesystem* fs) {
         if (res == BITMAP_INDETERMINATE) {
             free(bits);
             free(marker);
+            free(transaction_bits);
             return BITMAP_FAIL;
         }
     }
@@ -266,9 +338,16 @@ int bitmap_load(struct filesystem* fs) {
         if (res < 0){ 
             free(bits);
             free(marker);
+            free(transaction_bits);
             return BITMAP_FAIL;
         }
     }
+
+    
+    if (fs->bm->transaction_bits != NULL) free (fs->bm->transaction_bits);
+    fs->bm->transaction_bits = transaction_bits;
+    if (fs->bm->bits != NULL) free(fs->bm->bits);
+    fs->bm->bits = bits;
 
 
     return BITMAP_SUCCESS;

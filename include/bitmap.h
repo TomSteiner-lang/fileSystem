@@ -14,6 +14,12 @@ enum marker {
     MARKER_INVALID = 3
 };
 
+enum block_state {
+    BLOCK_FREE = 0,
+    BLOCK_ALLOCATED = 1,
+    BLOCK_RESERVED = 2
+};
+
 enum bitmap_status {
     BITMAP_SUCCESS = 0,
     BITMAP_FAIL = -1,
@@ -23,6 +29,7 @@ enum bitmap_status {
 struct bitmap {
     uint8_t* bits;
     uint8_t* marker;
+    uint8_t* transaction_bits;
     int marker_state;
     int prev_state;
     uint64_t block_count;
@@ -38,6 +45,10 @@ void bitmap_destroy(struct bitmap* bm);
 int bitmap_load(struct filesystem* fs);
 int bitmap_is_set(const struct bitmap* bm, size_t block);
 int bitmap_set(struct bitmap* bm, size_t block);
+int bitmap_reserve(struct bitmap* bm, size_t* out_block);
+int bitmap_is_reserved(const struct bitmap* bm, size_t block);
+int bitmap_set_reserved(struct bitmap* bm, size_t block);
+int bitmap_release_reserve(struct bitmap* bm, size_t block);
 
 
 

@@ -56,6 +56,26 @@ int bitmap_create(const struct superblock* sb, struct bitmap* bm) {
     return 0;
 }
 
+int bitmap_allocate(struct bitmap* bm, size_t* out_block) {
+    if (out_block == NULL) return -1;
+    
+    for (size_t i = 0; i < bm->block_count; i++) {
+        int state = bitmap_is_set(bm, i);
+        if (state < 0) return state;
+        if (state == BLOCK_FREE) {
+
+            int res = bitmap_set(bm, i);
+            if (res < 0) return res;
+
+            *out_block = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+
+
 int bitmap_reserve(struct bitmap* bm, size_t* out_block) {
     if (out_block == NULL) return -1;
     

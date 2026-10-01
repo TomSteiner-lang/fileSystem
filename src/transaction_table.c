@@ -113,6 +113,20 @@ struct transaction_handle* transaction_create(struct filesystem* fs) {
 
 
 
+
+
+    if (filesystem_flush_block(fs, new_transaction_block, 
+        new_transaction_block_index + fs->sb->transaction_table_index) < 0) {
+            bitmap_release_reserve(fs->bm, new_transaction_block[new_transaction_local_index].table_index);
+            free(new_transaction_block);
+            free(ret);
+            free(transaction_entry_table_block);
+            return NULL;
+        }
+
+
+        
+
     if (bitmap_set(fs->bm, new_transaction_block[new_transaction_local_index].table_index) < 0) {
         bitmap_release_reserve(fs->bm, new_transaction_block[new_transaction_local_index].table_index);
         free(new_transaction_block);
@@ -121,17 +135,6 @@ struct transaction_handle* transaction_create(struct filesystem* fs) {
         return NULL;
     }
 
-    if (filesystem_flush_block(fs, new_transaction_block, 
-        new_transaction_block_index + fs->sb->transaction_table_index) < 0) {
-            bitmap_free(fs->bm, new_transaction_block[new_transaction_local_index].table_index);
-            bitmap_release_reserve(fs->bm, new_transaction_block[new_transaction_local_index].table_index);
-            free(new_transaction_block);
-            free(ret);
-            free(transaction_entry_table_block);
-            return NULL;
-        }
-
-    
 
     int res = bitmap_flush(fs);
     
@@ -288,7 +291,7 @@ static int transaction_cleanup_resources(struct filesystem* fs, struct transacti
 
     if (filesystem_load_block(fs, transaction_table_block, t->transaction.table_index) < 0) {
         free(transaction_entry_table_block);
-        return -1;
+        return -2;
     }
 
 
@@ -319,19 +322,19 @@ static int transaction_cleanup_resources(struct filesystem* fs, struct transacti
 
     if (res == BITMAP_FAIL) {
         free(transaction_entry_table_block);
-        return -1;
+        return -2;
     }
 
     if (res == BITMAP_INDETERMINATE) {
         // todo - catastrophic faliure recovery
         free(transaction_entry_table_block);
-        return -1;
+        return -2;
     }
 
     transaction_table_block[transaction_local_index].status = TRANSACTION_DEAD;
     if (filesystem_flush_block(fs, transaction_table_block, transaction_block_index) < 0) {
         free(transaction_entry_table_block);
-        return -1;
+        return -2;
     }
     t->transaction.status = TRANSACTION_DEAD;
 
@@ -478,7 +481,11 @@ int transaction_add_blocks(struct filesystem* fs, struct transaction_handle* t, 
 
 
 int transaction_commit(struct filesystem* fs, struct transaction_handle* t) {
-    return transaction_cleanup_resources(fs, t);
+    // 0 means committed
+    // -2 means data committed but cleanup failed
+    int ret = transaction_cleanup_resources(fs, t);
+    if (ret == 0 || ret == 2) return 0;
+    return ret;
 }
 
 int transaction_abort(struct filesystem* fs, struct transaction_handle* t) {

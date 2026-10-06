@@ -124,7 +124,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
 
     struct inode inode_copy = *inode; 
 
-    size_t* index_block = calloc(1, fs->sb->block_size);
+    struct file_block_entry* index_block = calloc(1, fs->sb->block_size);
     if (index_block == NULL) return -1;
 
     int loaded = filesystem_load_block(fs, (void*)index_block, inode->index);
@@ -148,10 +148,10 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
     }
 
     for (size_t i = 0; i < inode->blocks; i++) {
-        int freed = bitmap_free(fs->bm, index_block[i]);
+        int freed = bitmap_free(fs->bm, index_block[i].block_number);
         if (freed < 0) {
             for (size_t j = 0; j < i; j++) {
-                bitmap_set(fs->bm, index_block[j]);
+                bitmap_set(fs->bm, index_block[j].block_number);
             }
             free(index_block);
             return -2;
@@ -160,7 +160,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
 
     if (bitmap_free(fs->bm, inode->index) < 0) {
         for (size_t i = 0; i < inode->blocks; i++) {
-            bitmap_set(fs->bm, index_block[i]);
+            bitmap_set(fs->bm, index_block[i].block_number);
         }
         free(index_block);
         return -2;
@@ -177,7 +177,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
     if (res == BITMAP_FAIL) {
         bitmap_set(fs->bm, inode->index);
         for (size_t i = 0; i < inode->blocks; i++) {
-            bitmap_set(fs->bm, index_block[i]);
+            bitmap_set(fs->bm, index_block[i].block_number);
         }
         free(index_block);
         return -2;

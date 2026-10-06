@@ -18,7 +18,7 @@ int file_write_block(struct filesystem* fs, struct file* file, void* buff, size_
 
     if (index >= inode->blocks) return -1;
 
-    size_t* index_block = calloc(1, fs->sb->block_size);
+    struct file_block_entry* index_block = calloc(1, fs->sb->block_size);
     if (index_block == NULL) return -1;
 
     if (filesystem_load_block(fs, index_block, inode->index) < 0) {
@@ -26,7 +26,7 @@ int file_write_block(struct filesystem* fs, struct file* file, void* buff, size_
         return -1;
     }
 
-    if (filesystem_flush_block(fs, buff, index_block[index]) < 0) {
+    if (filesystem_flush_block(fs, buff, index_block[index].block_number) < 0) {
         //disk corrupted
         free(index_block);
         return -1;
@@ -42,7 +42,7 @@ int file_read_block(struct filesystem* fs, struct file* file, void* buff, size_t
 
     if (index >= inode->blocks) return -1;
 
-    size_t* index_block = calloc(1, fs->sb->block_size);
+    struct file_block_entry* index_block = calloc(1, fs->sb->block_size);
     if (index_block == NULL) return -1;
 
     void* temp_buff = calloc(1, fs->sb->block_size);
@@ -57,7 +57,7 @@ int file_read_block(struct filesystem* fs, struct file* file, void* buff, size_t
         return -1;
     }
 
-    if (filesystem_load_block(fs, temp_buff, index_block[index]) < 0) {
+    if (filesystem_load_block(fs, temp_buff, index_block[index].block_number) < 0) {
         free(temp_buff);
         free(index_block);
         return -1;
@@ -79,7 +79,7 @@ int file_append_block(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
-    size_t* index_block = calloc(1, fs->sb->block_size);
+    struct file_block_entry* index_block = calloc(1, fs->sb->block_size);
     if (index_block == NULL) return -1;
 
     if (filesystem_load_block(fs, index_block, inode->index) < 0) {
@@ -93,7 +93,7 @@ int file_append_block(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
-    index_block[inode->blocks] = newblock;
+    index_block[inode->blocks].block_number = newblock;
 
 
 
@@ -150,7 +150,7 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
 
     if (inode->blocks == 0) return -1;
 
-    size_t* index_block = calloc(1, fs->sb->block_size);
+    struct file_block_entry* index_block = calloc(1, fs->sb->block_size);
     if (index_block == NULL) return -1;
 
     if (filesystem_load_block(fs, index_block, inode->index) < 0) {
@@ -158,7 +158,7 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
-    if (bitmap_free(fs->bm, index_block[inode->blocks -1]) < 0) {
+    if (bitmap_free(fs->bm, index_block[inode->blocks -1].block_number) < 0) {
         free(index_block);
         return -1;
     }
@@ -168,7 +168,7 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
     if (inode_table_flush(fs) < 0) { 
         inode->blocks++;
         inode_table_flush(fs);
-        bitmap_set(fs->bm, index_block[inode->blocks-1]);
+        bitmap_set(fs->bm, index_block[inode->blocks-1].block_number);
         free(index_block);
         return -1;
     }
@@ -181,7 +181,7 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
     if (res == BITMAP_FAIL) {
         inode->blocks++;
         inode_table_flush(fs);
-        bitmap_set(fs->bm, index_block[inode->blocks-1]);
+        bitmap_set(fs->bm, index_block[inode->blocks-1].block_number);
         free(index_block);
         return -1;
     }

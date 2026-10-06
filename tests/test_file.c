@@ -38,7 +38,7 @@ int main(void) {
     struct inode* inode = inode_table_get(fs->it, inode_index);
     assert(inode->type == INODE_DIRECTORY);
     assert(bitmap_is_set(fs->bm, inode->index));
-    assert(inode->blocks == 1);
+    assert(inode->blocks == 0);
     size_t* index_block = calloc(1, fs->sb->block_size);
 
     if (index_block == NULL) {
@@ -54,12 +54,13 @@ int main(void) {
     }
 
     assert(filesystem_load_block(fs, index_block,inode->index) == 0);
-    assert(index_block[0] != 0);
+    assert(index_block[0] == 0);
 
     assert(bitmap_is_set(fs->bm, index_block[0]));
 
     memset(index_block,0,fs->sb->block_size);
 
+    assert(file_append_block(fs, file) == 0);
     assert(file_append_block(fs, file) == 0);
     assert(file_append_block(fs, file) == 0);
     

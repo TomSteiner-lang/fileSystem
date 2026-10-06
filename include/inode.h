@@ -8,13 +8,14 @@ enum inode_type {
     INODE_FREE = 0,
     INODE_FILE = 1,
     INODE_DIRECTORY = 2,
+    INODE_INVALID = 3
 };
 
 struct inode {
     uint8_t type;
-    size_t blocks;
+    size_t blocks; //block count
     size_t index;
-    size_t entries;
+    size_t entries; //directory entries
 };
 
 

@@ -17,98 +17,103 @@
 
 struct file* filesystem_create_file(struct filesystem* fs, int type) {
     
+
+
+    //mechanism:
+    //allocate block for index
+    //wipe the index block - fail: remove bitmap allocation from ram
+    //get inode - fail: same as above
+    //flush inode with type invalid - fail: remove bitmap allocation and inode from ram
+    //flush bitmap - fail: remove only bitmap allocation from ram, recovery handles the inode
+    //flush inode with real type - fail: nothing, recovery cleans garbage inode
+
+
+
+    if (type == INODE_FREE || type == INODE_INVALID) return NULL;
+
     struct file* file = calloc(1, sizeof(struct file));
     if (file == NULL) {
         return NULL;
     }
-
-
-    size_t inode_index = inode_table_add(fs->it, type);
-    if (inode_index == 0) {
+    void* block_buffer = calloc(1, fs->sb->block_size);
+    if (block_buffer == NULL) {
         free(file);
         return NULL;
     }
 
-    struct inode* inode = inode_table_get(fs->it, inode_index);
-    if (inode == NULL) {
-        inode_table_remove(fs->it, inode_index);
-        free(file);
-        return NULL;
-    }
-
-    
     size_t index_block = 0;
     if (bitmap_allocate(fs->bm, &index_block) < 0) {
-        inode_table_remove(fs->it, inode_index);
+        free(block_buffer);
         free(file);
         return NULL;
     }
 
-    inode->index = index_block;
-    size_t data_block = 0;
-    if (bitmap_allocate(fs->bm, &data_block) < 0) {
+
+    if (filesystem_flush_block(fs, block_buffer, index_block) < 0) {
         bitmap_free(fs->bm, index_block);
-        inode_table_remove(fs->it, inode_index);
+        free(block_buffer);
         free(file);
         return NULL;
     }
 
-    inode->blocks = 1;
-    file->inode = inode_index;
- 
-    size_t* index = calloc(1, fs->sb->block_size);
-    if (index == NULL) {
-        bitmap_free(fs->bm, data_block);
+    size_t inode_index = inode_table_add(fs->it, INODE_INVALID);
+    if (inode_index == 0) {
         bitmap_free(fs->bm, index_block);
-        inode_table_remove(fs->it, inode_index);
+        free(block_buffer);
         free(file);
         return NULL;
     }
 
-    index[0] = data_block;
+    struct inode inode = {
+        .blocks = 0,
+        .entries = 0,
+        .index = index_block,
+        .type = INODE_INVALID
+    };
 
-    if (filesystem_flush_block(fs, index, index_block) < 0) {
-        free(index);
-        bitmap_free(fs->bm, data_block);
+    if (inode_table_set(fs->it, &inode, inode_index) < 0) {
+        inode_table_remove(fs->it, inode_index);
         bitmap_free(fs->bm, index_block);
-        inode_table_remove(fs->it, inode_index);
-        free(file);
-        return NULL;
-    }
-    free(index);
-
-    
-    int res = bitmap_flush(fs);
-
-    if (res == BITMAP_INDETERMINATE) {
-        res = bitmap_validate_flush(fs);
-    }
-
-    if (res == BITMAP_FAIL) {        
-        bitmap_free(fs->bm, data_block);
-        bitmap_free(fs->bm, index_block);
-        inode_table_remove(fs->it, inode_index);
+        free(block_buffer);
         free(file);
         return NULL;
     }
 
-    if (res == BITMAP_INDETERMINATE) {
-        // todo - catastrophic faliure recovery
-        free(file);
-        return NULL;
-    }
 
     if (inode_table_flush(fs) < 0) {
-               
-        bitmap_free(fs->bm, data_block);
-        bitmap_free(fs->bm, index_block);
-        bitmap_flush(fs);
         inode_table_remove(fs->it, inode_index);
-        inode_table_flush(fs);
+        bitmap_free(fs->bm, index_block);
+        free(block_buffer);
         free(file);
         return NULL;
     }
 
+
+    if (bitmap_flush(fs) < 0) {
+        bitmap_free(fs->bm, index_block);
+        free(block_buffer);
+        free(file);
+        return NULL;
+    }
+
+
+    inode.type = type;
+    if (inode_table_set(fs->it, &inode, inode_index) < 0) {
+        //currently can never happen because only way this fails is boundary checks that already passed
+        free(block_buffer);
+        free(file);
+        return NULL;
+    }
+
+
+    if (inode_table_flush(fs) < 0) {
+        free(block_buffer);
+        free(file);
+        return NULL;
+    }
+
+
+    file->inode = inode_index;
     return file;
 
 }
@@ -129,6 +134,19 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
         return -1;
     }
 
+
+    inode_copy.type = INODE_INVALID;
+    if (inode_table_set(fs->it, &inode_copy, file->inode) < 0) {
+        free(index_block);
+        return -1;
+    }
+    
+    
+    if (inode_table_flush(fs) < 0) {
+        free(index_block);
+        return -1;
+    }
+
     for (size_t i = 0; i < inode->blocks; i++) {
         int freed = bitmap_free(fs->bm, index_block[i]);
         if (freed < 0) {
@@ -136,7 +154,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
                 bitmap_set(fs->bm, index_block[j]);
             }
             free(index_block);
-            return -1;
+            return -2;
         }
     }
 
@@ -145,7 +163,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
             bitmap_set(fs->bm, index_block[i]);
         }
         free(index_block);
-        return -1;
+        return -2;
     }
     
 
@@ -162,31 +180,24 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
             bitmap_set(fs->bm, index_block[i]);
         }
         free(index_block);
-        return -1;
+        return -2;
     }
 
     if (res == BITMAP_INDETERMINATE) {
         // todo - catastrophic faliure recovery
         free(index_block);
-        return -1;
+        return -2;
     }
 
 
     inode_table_remove(fs->it, file->inode);
 
     if (inode_table_flush(fs) < 0) {
-        inode_table_set(fs->it, &inode_copy, file->inode);
-        bitmap_set(fs->bm, inode_copy.index);
-        for (size_t i = 0; i < inode_copy.blocks; i++) {
-            bitmap_set(fs->bm, index_block[i]);
-        }
-        bitmap_flush(fs);
         free(index_block);
-        return -1;
+        return -2;
     }
 
     free(index_block);
-    free(file);
     return 0;
 
 

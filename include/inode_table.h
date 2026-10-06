@@ -19,7 +19,7 @@ void inode_table_remove(struct inode_table* it, size_t index);
 int inode_table_create(const struct superblock* sb, struct inode_table* it);
 void inode_table_destroy(struct inode_table* it);
 int inode_table_load(struct filesystem* fs);
-size_t inode_table_flush(struct filesystem* fs);
+int inode_table_flush(struct filesystem* fs);
 
 
 

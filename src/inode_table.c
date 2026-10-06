@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -107,15 +106,52 @@ struct inode* inode_table_get(struct inode_table* it, size_t index) {
     return it->inodes + index;
 }
 
-size_t inode_table_flush(struct filesystem* fs) {
+int inode_table_flush(struct filesystem* fs) {
+
+
+
+    struct transaction_handle* t = transaction_create(fs);
+    if (t == NULL) {
+        //call cleanup
+        return -1;
+    }
+
+    size_t inode_blocks[fs->sb->inode_table_size];
+    
+    for (size_t i = 0; i < fs->sb->inode_table_size; i++) {
+        inode_blocks[i] = i + fs->sb->inode_table_index;
+    }
+
+    int res = transaction_add_blocks(fs, t, fs->sb->inode_table_size, inode_blocks);
+    if (res < 0) {
+        //call cleanup
+        return -1;
+    }
+
+
 
     for (size_t i = 0; i < fs->sb->inode_table_size; i++) {
-        int res = filesystem_flush_block(fs,
+        res = filesystem_flush_block(fs,
         (uint8_t *)fs->it->inodes + i * fs->sb->block_size,
         fs->sb->inode_table_index + i);
 
-        if (res < 0) return i;
+        if (res < 0) {
+
+            res = transaction_abort(fs, t);
+            // if (res < 0) {
+            //     // call cleanup
+            // }
+            return -1;
+        }
     }
 
-    return fs->sb->inode_table_size;
+    res = transaction_commit(fs, t);
+    if (res < 0) {
+        return res;
+    }
+
+
+    
+
+    return 0;
 }

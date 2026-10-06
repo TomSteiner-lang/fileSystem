@@ -70,8 +70,8 @@ int directory_add(struct filesystem* fs, struct file* directory, struct file* fi
     }
 
     dir_inode->entries++;
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
-        //ghost entry might be on disk
+    if (inode_table_flush(fs) < 0) {
+
         free(dir_data_block);
         return -1;
     }
@@ -136,7 +136,7 @@ int directory_remove(struct filesystem* fs, struct file* directory, char* path) 
 
     dir_inode->entries--;
 
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+    if (inode_table_flush(fs) < 0) {
         free(last_block);
         if (last_block != file_entry_block) free(file_entry_block);
         return -1;

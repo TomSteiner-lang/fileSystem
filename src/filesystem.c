@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -99,7 +98,7 @@ struct file* filesystem_create_file(struct filesystem* fs, int type) {
         return NULL;
     }
 
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+    if (inode_table_flush(fs) < 0) {
                
         bitmap_free(fs->bm, data_block);
         bitmap_free(fs->bm, index_block);
@@ -175,7 +174,7 @@ int filesystem_delete_file(struct filesystem* fs, struct file* file) {
 
     inode_table_remove(fs->it, file->inode);
 
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+    if (inode_table_flush(fs) < 0) {
         inode_table_set(fs->it, &inode_copy, file->inode);
         bitmap_set(fs->bm, inode_copy.index);
         for (size_t i = 0; i < inode_copy.blocks; i++) {
@@ -237,7 +236,7 @@ int filesystem_unmount(struct filesystem* fs) {
 
 
 
-    if (inode_table_flush(fs) != FS_INODE_BLOCKS) {
+    if (inode_table_flush(fs) != 0) {
         //corrupted disk
         return -1;
     }

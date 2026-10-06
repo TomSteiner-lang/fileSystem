@@ -108,7 +108,7 @@ int file_append_block(struct filesystem* fs, struct file* file) {
     inode->blocks++;
 
     
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) {
+    if (inode_table_flush(fs) < 0) {
         inode->blocks--;
         bitmap_free(fs->bm, newblock);
         free(index_block);
@@ -165,7 +165,7 @@ int file_pop_block(struct filesystem* fs, struct file* file) {
 
     inode->blocks--;
 
-    if (inode_table_flush(fs) < FS_INODE_BLOCKS) { 
+    if (inode_table_flush(fs) < 0) { 
         inode->blocks++;
         inode_table_flush(fs);
         bitmap_set(fs->bm, index_block[inode->blocks-1]);

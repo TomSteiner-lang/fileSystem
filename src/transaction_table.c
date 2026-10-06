@@ -1,8 +1,5 @@
 
 
-
-
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -77,6 +74,8 @@ struct transaction_handle* transaction_create(struct filesystem* fs) {
         return NULL;
     }
 
+
+
     if (filesystem_load_block(fs, new_transaction_block, 
         new_transaction_block_index) < 0) {
             free(new_transaction_block);
@@ -99,6 +98,8 @@ struct transaction_handle* transaction_create(struct filesystem* fs) {
 
     size_t reserved_block = 0;
 
+
+
     if (bitmap_reserve(fs->bm, &reserved_block) < 0) {
         free(new_transaction_block);
         free(ret);
@@ -116,7 +117,7 @@ struct transaction_handle* transaction_create(struct filesystem* fs) {
 
 
     if (filesystem_flush_block(fs, new_transaction_block, 
-        new_transaction_block_index + fs->sb->transaction_table_index) < 0) {
+        new_transaction_block_index) < 0) {
             bitmap_release_reserve(fs->bm, new_transaction_block[new_transaction_local_index].table_index);
             free(new_transaction_block);
             free(ret);
@@ -262,6 +263,8 @@ static int transaction_cleanup_resources(struct filesystem* fs, struct transacti
     }
 
 
+
+
     if (transaction_table_block[transaction_local_index].status == TRANSACTION_DEAD) {
 
         transaction_table_release_slot(fs->tt, t->disk_index);
@@ -289,10 +292,11 @@ static int transaction_cleanup_resources(struct filesystem* fs, struct transacti
     }
     t->transaction.status = TRANSACTION_CLEANUP_RESOURCES;
 
-    if (filesystem_load_block(fs, transaction_table_block, t->transaction.table_index) < 0) {
+    if (filesystem_load_block(fs, transaction_entry_table_block, t->transaction.table_index) < 0) {
         free(transaction_entry_table_block);
         return -2;
     }
+
 
 
     for (size_t i = 0; i < t->entry_count; i++) {
@@ -508,6 +512,7 @@ int transaction_abort(struct filesystem* fs, struct transaction_handle* t) {
     % (fs->sb->block_size / sizeof(struct transaction));
 
 
+
     if (filesystem_load_block(fs, transaction_table, transaction_table_block_index) < 0) {
         free(blocks);
         return -1;
@@ -547,7 +552,7 @@ int transaction_abort(struct filesystem* fs, struct transaction_handle* t) {
         return -1;
     }
 
-
+    free(blocks);
 
     return 0;
 

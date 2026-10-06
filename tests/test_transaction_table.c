@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include "../include/filesystem.h"
-#include <stdio.h>
 #include <stdlib.h>
 
 #define TEST_PATH "./images/test.img"
@@ -103,7 +102,7 @@ int main(void) {
     assert(fs->tt->free_slots_count == 1);
     assert(fs->tt->free_slots[fs->tt->free_slots_count-1] == t->disk_index);
 
-    free(t);
+    // free(t);
 
 
     for (int i = 0; i < 10; i++) {
@@ -117,18 +116,28 @@ int main(void) {
     memset(testblock, 0, fs->sb->block_size);
     strcpy(testblock, message2);
 
+
+
     for (int i = 0; i < 10; i++) {
         assert(filesystem_flush_block(fs, testblock, blocks[i]) == 0);
     }
 
+
+    assert(filesystem_load_block(fs, testblock, t->disk_index + fs->sb->transaction_table_index) == 0);
+    assert(((struct transaction*) testblock)[0].status == TRANSACTION_DEAD);
+
+
     assert(transaction_abort(fs, t2) == 0);
+
+
+    assert(filesystem_load_block(fs, testblock, t->disk_index + fs->sb->transaction_table_index) == 0);
+    assert(((struct transaction*) testblock)[0].status == TRANSACTION_DEAD);
 
     for (int i = 0; i < 10; i++) {
         assert(filesystem_load_block(fs, testblock, transaction_index[i].backup_index) == 0);
         assert(!strcmp(testblock, testmessage));
     }
 
-    
 
     assert(!filesystem_unmount(fs));
     assert(!disk_close(disk));

@@ -89,8 +89,21 @@ struct file* filesystem_create_file(struct filesystem* fs, int type) {
     }
 
 
-    if (bitmap_flush(fs) < 0) {
+    int res = bitmap_flush(fs);
+    
+    if (res = BITMAP_INDETERMINATE) {
+        res = bitmap_validate_flush(fs);
+    }
+    
+    if (res == BITMAP_FAIL) {
         bitmap_free(fs->bm, index_block);
+        free(block_buffer);
+        free(file);
+        return NULL;
+    }
+
+    if (res == BITMAP_INDETERMINATE) {
+        // todo - catastrophic failure recovery
         free(block_buffer);
         free(file);
         return NULL;

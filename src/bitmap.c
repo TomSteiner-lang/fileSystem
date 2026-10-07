@@ -170,6 +170,9 @@ int bitmap_free(struct bitmap* bm, size_t block) {
 
     *byte &= mask;
 
+    //deliberately ignore return status
+    bitmap_release_reserve(bm, block);
+
     return 0;
 }
 

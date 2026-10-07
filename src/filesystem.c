@@ -91,7 +91,7 @@ struct file* filesystem_create_file(struct filesystem* fs, int type) {
 
     int res = bitmap_flush(fs);
     
-    if (res = BITMAP_INDETERMINATE) {
+    if (res == BITMAP_INDETERMINATE) {
         res = bitmap_validate_flush(fs);
     }
     

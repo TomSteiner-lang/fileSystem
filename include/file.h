@@ -20,7 +20,8 @@ struct file_block_entry {
 enum file_block_entry_status {
     FILE_BLOCK_FREE = 0,
     FILE_BLOCK_ALLOCATING = 1,
-    FILE_BLOCK_ALLOCATED = 2
+    FILE_BLOCK_ALLOCATED = 2,
+    FILE_BLOCK_DEALLOCATING = 3
 };
 
 int file_write_block(struct filesystem* fs, struct file* file, void* buff, size_t index);

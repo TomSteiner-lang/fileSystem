@@ -147,7 +147,12 @@ int inode_table_flush(struct filesystem* fs) {
 
     res = transaction_commit(fs, t);
     if (res < 0) {
-        return res;
+        res = transaction_abort(fs, t);
+        if (res < 0) {
+            //call
+        }
+        
+        return -1;
     }
 
 
